@@ -16,8 +16,11 @@ def main():
             break
         frame = tracker.process_frame(frame)
         cv2.imshow('Hand Tracking', frame)
-        if cv2.waitKey(1) & 0xFF == 27:  # Press 'Esc' to exit
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27:  # Press 'Esc' to exit
             break
+        elif key == ord('g'): # Press 'g' to clear trajectory
+            tracker.clear_trajectory()
     tracker.release()
     cap.release()
     cv2.destroyAllWindows()
