@@ -68,7 +68,14 @@ class HandTracker:
         hand_y_axis = np.cross(hand_z_axis, hand_x_axis)
         hand_y_axis = hand_y_axis / np.linalg.norm(hand_y_axis) # Normalize Y
 
-        return np.degrees(roll), np.degrees(pitch), np.degrees(yaw), wrist, hand_x_axis, hand_y_axis, hand_z_axis
+        # Construct rotation matrix from these axes
+        # The columns of the rotation matrix are the basis vectors of the new coordinate system
+        rotation_matrix = np.array([hand_x_axis, hand_y_axis, hand_z_axis]).T
+
+        # Convert rotation matrix to rotation vector
+        rvec, _ = cv2.Rodrigues(rotation_matrix)
+
+        return rvec, wrist # Return rvec and wrist coordinates
 
     def _normalize_angle(self, angle, min_val, max_val):
         # Normalize angle to a 0-1 range and clamp it
@@ -103,25 +110,24 @@ class HandTracker:
                 cx, cy = int(index_finger_tip.x * w), int(index_finger_tip.y * h)
 
                 # Calculate hand orientation and get gizmo axes
-                roll, pitch, yaw, wrist_coords, x_axis, y_axis, z_axis = self._get_hand_orientation(hand_landmarks, w, h)
+                # Calculate hand orientation and get rvec
+                rvec, _ = self._get_hand_orientation(hand_landmarks, w, h)
 
-                # Normalize roll, pitch, yaw for color blending (adjust min/max based on expected range)
-                # These ranges are estimates and might need tuning
-                raw_roll_norm = self._normalize_angle(roll, -90, 90)
-                pitch_norm = self._normalize_angle(pitch, -90, 90)
-                yaw_norm = self._normalize_angle(yaw, -90, 90)
+                # Get index finger tip coordinates (landmark 8) for translation vector
+                index_finger_tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
+                tvec = np.array([index_finger_tip.x * w, index_finger_tip.y * h, 0.0], dtype="double") # Z is 0 for 2D projection
 
-                # Apply smoothing to roll_norm
-                self.roll_history.append(raw_roll_norm)
-                if len(self.roll_history) > self.smoothing_window_size:
-                    self.roll_history.pop(0) # Remove oldest value
+                # Define dummy camera matrix and distortion coefficients
+                focal_length = w # A reasonable estimate
+                center_x, center_y = w / 2, h / 2
+                camera_matrix = np.array([[focal_length, 0, center_x],
+                                          [0, focal_length, center_y],
+                                          [0, 0, 1]], dtype="double")
+                dist_coeffs = np.zeros((4, 1), dtype="double") # No distortion
 
-                smoothed_roll_norm = np.mean(self.roll_history)
-
-                # Draw the orientation gizmo at the index finger tip
-                # Use (cx, cy, 0) as the origin for the gizmo, assuming Z is not directly used for 2D drawing
-                # The axes (x_axis, y_axis, z_axis) are still relative to the hand's orientation
-                self._draw_gizmo(frame, np.array([cx, cy, 0]), x_axis, y_axis, z_axis)
+                # Draw the 3D axis gizmo
+                gizmo_size = 50 # As discussed in the plan
+                cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, gizmo_size)
 
         # Trajectory drawing is disabled as per user request.
         # self.drawing_points.append(...)
@@ -129,25 +135,6 @@ class HandTracker:
         # cv2.line(...)
 
         return frame
-
-    def _draw_gizmo(self, frame, origin, x_axis, y_axis, z_axis, scale=50):
-        # Convert 3D origin to 2D image coordinates
-        origin_2d = (int(origin[0]), int(origin[1]))
-
-        # Define axis colors (BGR)
-        x_color = (0, 0, 255) # Red for X
-        y_color = (0, 255, 0) # Green for Y
-        z_color = (255, 0, 0) # Blue for Z
-
-        # Calculate end points for axes
-        x_end = (int(origin[0] + x_axis[0] * scale), int(origin[1] + x_axis[1] * scale))
-        y_end = (int(origin[0] + y_axis[0] * scale), int(origin[1] + y_axis[1] * scale))
-        z_end = (int(origin[0] + z_axis[0] * scale), int(origin[1] + z_axis[1] * scale))
-
-        # Draw axes
-        cv2.line(frame, origin_2d, x_end, x_color, 2)
-        cv2.line(frame, origin_2d, y_end, y_color, 2)
-        cv2.line(frame, origin_2d, z_end, z_color, 2)
 
     def clear_trajectory(self):
         self.drawing_points = []
