@@ -94,3 +94,5 @@ class HandTracker:
 
     def release(self):
         self.hands.close()
+
+
