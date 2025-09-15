@@ -67,16 +67,23 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 results = tracker.hands.process(rgb_frame)
                 h, w, _ = frame.shape
+                roll_text = pitch_text = yaw_text = ""
                 if results.multi_hand_landmarks:
                     for hand_landmarks in results.multi_hand_landmarks:
                         index_finger_tip = hand_landmarks.landmark[tracker.mp_hands.HandLandmark.INDEX_FINGER_TIP]
                         cx, cy = int(index_finger_tip.x * w), int(index_finger_tip.y * h)
                         rvec, wrist_3d_coords, roll, pitch, yaw = tracker._get_hand_orientation(hand_landmarks, w, h)
+                        roll_deg = np.degrees(roll)
+                        pitch_deg = np.degrees(pitch)
+                        yaw_deg = np.degrees(yaw)
                         csv_writer.writerow([
-                            frame_idx, cx, cy, np.degrees(roll), np.degrees(pitch), np.degrees(yaw)
+                            frame_idx, cx, cy, roll_deg, pitch_deg, yaw_deg
                         ])
                         sampled_points.append((cx, cy))
-                        sampled_gizmos.append((cx, cy, np.degrees(roll), np.degrees(pitch), np.degrees(yaw)))
+                        sampled_gizmos.append((cx, cy, roll_deg, pitch_deg, yaw_deg))
+                        roll_text = f"Roll: {roll_deg:.2f}"
+                        pitch_text = f"Pitch: {pitch_deg:.2f}"
+                        yaw_text = f"Yaw: {yaw_deg:.2f}"
                 # Draw all sampled points as dots
                 for pt in sampled_points:
                     cv2.circle(frame, pt, 6, (0, 0, 255), -1)
@@ -84,6 +91,15 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
                 for giz in sampled_gizmos:
                     cx, cy, roll, pitch, yaw = giz
                     draw_gizmo(frame, cx, cy, roll, pitch, yaw, size=40)
+                # Add text annotation (frame number and RPY)
+                text = f"Frame: {frame_idx}"
+                cv2.putText(frame, text, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 0), 3, cv2.LINE_AA)
+                if roll_text:
+                    cv2.putText(frame, roll_text, (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
+                if pitch_text:
+                    cv2.putText(frame, pitch_text, (30, 140), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2, cv2.LINE_AA)
+                if yaw_text:
+                    cv2.putText(frame, yaw_text, (30, 180), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2, cv2.LINE_AA)
                 frame_path = os.path.join(temp_dir, f"frame_{saved_idx:05d}.png")
                 cv2.imwrite(frame_path, frame)
                 saved_idx += 1

@@ -66,9 +66,9 @@ class HandTracker:
                 tvec = np.array([wrist_3d_coords[0] * w, wrist_3d_coords[1] * h, wrist_3d_coords[2] * w], dtype="double")
 
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                cv2.putText(frame, f"Roll: {np.degrees(roll):.2f}", (10, 30), font, 1, (0, 0, 255), 2, cv2.LINE_AA)   
-                cv2.putText(frame, f"Pitch: {np.degrees(pitch):.2f}", (10, 70), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-                cv2.putText(frame, f"Yaw: {np.degrees(yaw):.2f}", (10, 110), font, 1, (255, 0, 0), 2, cv2.LINE_AA)
+                cv2.putText(frame, f"roll: {np.degrees(roll):.2f}", (10, 30), font, 1, (0, 0, 255), 2, cv2.LINE_AA)   
+                cv2.putText(frame, f"pitch: {np.degrees(pitch):.2f}", (10, 70), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+                cv2.putText(frame, f"yaw: {np.degrees(yaw):.2f}", (10, 110), font, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
                 index_finger_tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
                 cx, cy = int(index_finger_tip.x * w), int(index_finger_tip.y * h)
