@@ -11,11 +11,11 @@ class HandTracker:
             min_tracking_confidence=tracking_confidence
         )
         self.mp_draw = mp.solutions.drawing_utils
-        self.drawing_points = [] 
+        self.drawing_points = [] # To store (x, y, roll, pitch, yaw)
         self.previous_roll_norm = None
         self.roll_change_threshold = roll_change_threshold
-        self.roll_history = [] 
-        self.smoothing_window_size = smoothing_window_size
+        self.roll_history = [] # For smoothing roll values
+        self.smoothing_window_size = 5
 
     def _get_hand_orientation(self, hand_landmarks, w, h):
         points = np.asarray([
@@ -41,7 +41,7 @@ class HandTracker:
         
         rotation_matrix = np.array([hand_x_axis, hand_y_axis, hand_z_axis]).T
         rvec, _ = cv2.Rodrigues(rotation_matrix)
-        return rvec, points[0]
+        return rvec, points[0], roll, pitch, yaw
 
     def _normalize_angle(self, angle, min_val, max_val):
         normalized = (angle - min_val) / (max_val - min_val)
@@ -60,22 +60,29 @@ class HandTracker:
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
                 self.mp_draw.draw_landmarks(frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
+                
+                rvec, wrist_3d_coords, roll, pitch, yaw = self._get_hand_orientation(hand_landmarks, w, h)
+                
+                tvec = np.array([wrist_3d_coords[0] * w, wrist_3d_coords[1] * h, wrist_3d_coords[2] * w], dtype="double")
+                
+                # Display Roll, Pitch, Yaw with different colors
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                cv2.putText(frame, f"Roll: {np.degrees(roll):.2f}", (10, 30), font, 1, (0, 0, 255), 2, cv2.LINE_AA)   # Red for Roll
+                cv2.putText(frame, f"Pitch: {np.degrees(pitch):.2f}", (10, 70), font, 1, (0, 255, 0), 2, cv2.LINE_AA) # Green for Pitch
+                cv2.putText(frame, f"Yaw: {np.degrees(yaw):.2f}", (10, 110), font, 1, (255, 0, 0), 2, cv2.LINE_AA)  # Blue for Yaw
+
+                # Get index finger tip coordinates (landmark 8) for drawing trajectory
                 index_finger_tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
                 cx, cy = int(index_finger_tip.x * w), int(index_finger_tip.y * h)
-                rvec, _ = self._get_hand_orientation(hand_landmarks, w, h)
+
+                # Append current point to drawing_points
+                self.drawing_points.append((cx, cy))
+
+                # Draw trajectory
+                for i in range(1, len(self.drawing_points)):
+                    cv2.line(frame, self.drawing_points[i-1], self.drawing_points[i], (0, 255, 0), 2)
+                cv2.circle(frame, (cx, cy), 5, (0, 0, 255), cv2.FILLED)
                 
-                index_finger_tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
-                tvec = np.array([index_finger_tip.x * w, index_finger_tip.y * h, 0.0], dtype="double") 
-                
-                focal_length = w 
-                center_x, center_y = w / 2, h / 2
-                camera_matrix = np.array([[focal_length, 0, center_x],
-                                          [0, focal_length, center_y],
-                                          [0, 0, 1]], dtype="double")
-                dist_coeffs = np.zeros((4, 1), dtype="double") 
-                
-                gizmo_size = 50 
-                cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, gizmo_size)
         return frame
 
     def clear_trajectory(self):
