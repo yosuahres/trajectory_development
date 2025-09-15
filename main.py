@@ -47,13 +47,12 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
     tracker = HandTracker()
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    output_fps = 3
+    output_fps = 2
     temp_dir = "temp_sampled_frames"
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
-    sampled_points = []  # Store (cx, cy)
-    sampled_gizmos = []  # Store (cx, cy, roll, pitch, yaw)
+    all_sampled_gizmos = []  # Accumulate all sampled gizmos across frames
     with open(output_csv, mode='w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         csv_writer.writerow(["frame", "x", "y", "roll", "pitch", "yaw"])
@@ -68,6 +67,7 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
                 results = tracker.hands.process(rgb_frame)
                 h, w, _ = frame.shape
                 roll_text = pitch_text = yaw_text = ""
+                new_gizmos = []
                 if results.multi_hand_landmarks:
                     for hand_landmarks in results.multi_hand_landmarks:
                         index_finger_tip = hand_landmarks.landmark[tracker.mp_hands.HandLandmark.INDEX_FINGER_TIP]
@@ -79,18 +79,20 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
                         csv_writer.writerow([
                             frame_idx, cx, cy, roll_deg, pitch_deg, yaw_deg
                         ])
-                        sampled_points.append((cx, cy))
-                        sampled_gizmos.append((cx, cy, roll_deg, pitch_deg, yaw_deg))
-                        roll_text = f"Roll: {roll_deg:.2f}"
-                        pitch_text = f"Pitch: {pitch_deg:.2f}"
-                        yaw_text = f"Yaw: {yaw_deg:.2f}"
-                # Draw all sampled points as dots
-                for pt in sampled_points:
-                    cv2.circle(frame, pt, 6, (0, 0, 255), -1)
-                # Draw all gizmos at each sampled point
-                for giz in sampled_gizmos:
+                        new_gizmos.append((cx, cy, roll_deg, pitch_deg, yaw_deg))
+                        roll_text = f"roll: {roll_deg:.2f}"
+                        pitch_text = f"pitch: {pitch_deg:.2f}"
+                        yaw_text = f"yaw: {yaw_deg:.2f}"
+                # Accumulate all gizmos
+                all_sampled_gizmos.extend(new_gizmos)
+                # Draw all accumulated gizmos so far
+                for giz in all_sampled_gizmos:
                     cx, cy, roll, pitch, yaw = giz
                     draw_gizmo(frame, cx, cy, roll, pitch, yaw, size=40)
+                # Draw all accumulated points as dots
+                for giz in all_sampled_gizmos:
+                    cx, cy, *_ = giz
+                    cv2.circle(frame, (cx, cy), 6, (0, 0, 255), -1)
                 # Add text annotation (frame number and RPY)
                 text = f"Frame: {frame_idx}"
                 cv2.putText(frame, text, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 0), 3, cv2.LINE_AA)
