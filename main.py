@@ -52,7 +52,8 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
     if os.path.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
-    all_sampled_gizmos = []  # Accumulate all sampled gizmos across frames
+    all_sampled_gizmos = []  
+
     with open(output_csv, mode='w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         csv_writer.writerow(["frame", "x", "y", "roll", "pitch", "yaw"])
@@ -83,18 +84,27 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
                         roll_text = f"roll: {roll_deg:.2f}"
                         pitch_text = f"pitch: {pitch_deg:.2f}"
                         yaw_text = f"yaw: {yaw_deg:.2f}"
-                # Accumulate all gizmos
                 all_sampled_gizmos.extend(new_gizmos)
-                # Draw all accumulated gizmos so far
+
+                # draw lines
+                if len(all_sampled_gizmos) > 1:
+                    for i in range(1, len(all_sampled_gizmos)):
+                        cx0, cy0, *_ = all_sampled_gizmos[i-1]
+                        cx1, cy1, *_ = all_sampled_gizmos[i]
+                        cv2.line(frame, (cx0, cy0), (cx1, cy1), (0, 255, 255), 2)
+
+                # draw gizmo
                 for giz in all_sampled_gizmos:
                     cx, cy, roll, pitch, yaw = giz
                     draw_gizmo(frame, cx, cy, roll, pitch, yaw, size=40)
-                # Draw all accumulated points as dots
+
+                # draw dots
                 for giz in all_sampled_gizmos:
                     cx, cy, *_ = giz
                     cv2.circle(frame, (cx, cy), 6, (0, 0, 255), -1)
-                # Add text annotation (frame number and RPY)
-                text = f"Frame: {frame_idx}"
+
+        
+                text = f"frame: {frame_idx}"
                 cv2.putText(frame, text, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 0), 3, cv2.LINE_AA)
                 if roll_text:
                     cv2.putText(frame, roll_text, (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
@@ -106,9 +116,9 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
                 cv2.imwrite(frame_path, frame)
                 saved_idx += 1
             frame_idx += 1
+
     cap.release()
     tracker.release()
-    # Use ffmpeg to create video from sampled frames
     ffmpeg_cmd = [
         "ffmpeg", "-y", "-framerate", str(output_fps), "-i",
         os.path.join(temp_dir, "frame_%05d.png"),
