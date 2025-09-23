@@ -1,6 +1,7 @@
 import cv2
 import mediapipe as mp
 import numpy as np
+from includes.filter import AverageFilter
 
 class HandTracker:
     def __init__(self, max_num_hands=2, detection_confidence=0.7, tracking_confidence=0.9, roll_change_threshold=0.02, smoothing_window_size=5, frame_skip=1):
@@ -18,6 +19,14 @@ class HandTracker:
         self.smoothing_window_size = 5
         self.frame_skip = frame_skip
         self.frame_count = 0
+
+        # init filter
+        filter_window_size = smoothing_window_size 
+        self.roll_filter = AverageFilter(filter_window_size)
+        self.pitch_filter = AverageFilter(filter_window_size)
+        self.yaw_filter = AverageFilter(filter_window_size)
+        self.x_filter = AverageFilter(filter_window_size)
+        self.y_filter = AverageFilter(filter_window_size)
 
     def _get_hand_orientation(self, hand_landmarks, w, h):
         wrist = np.array([hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y, hand_landmarks.landmark[0].z])
@@ -79,7 +88,12 @@ class HandTracker:
             for hand_landmarks in results.multi_hand_landmarks:
                 self.mp_draw.draw_landmarks(frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
 
-                rvec, wrist_3d_coords, roll, pitch, yaw = self._get_hand_orientation(hand_landmarks, w, h)
+                rvec, wrist_3d_coords, raw_roll, raw_pitch, raw_yaw = self._get_hand_orientation(hand_landmarks, w, h)
+
+                # Apply moving average filter
+                roll = self.roll_filter.update(raw_roll)
+                pitch = self.pitch_filter.update(raw_pitch)
+                yaw = self.yaw_filter.update(raw_yaw)
 
                 tvec = np.array([wrist_3d_coords[0] * w, wrist_3d_coords[1] * h, wrist_3d_coords[2] * w], dtype="double")
 
@@ -93,7 +107,11 @@ class HandTracker:
                 cv2.putText(frame, f"Yaw: {np.degrees(yaw):.1f}° ({yaw_desc})", (10, 90), font, 0.7, (255, 0, 0), 2, cv2.LINE_AA)
 
                 index_finger_tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
-                cx, cy = int(index_finger_tip.x * w), int(index_finger_tip.y * h)
+                raw_cx, raw_cy = int(index_finger_tip.x * w), int(index_finger_tip.y * h)
+
+                # Apply moving average filter to coordinates
+                cx = int(self.x_filter.update(raw_cx))
+                cy = int(self.y_filter.update(raw_cy))
 
                 self.drawing_points.append((cx, cy, roll, pitch, yaw))
 
@@ -112,7 +130,12 @@ class HandTracker:
 
     def clear_trajectory(self):
         self.drawing_points = []
-        self.previous_roll_norm = None 
+        self.previous_roll_norm = None
+        self.roll_filter.reset()
+        self.pitch_filter.reset()
+        self.yaw_filter.reset()
+        self.x_filter.reset()
+        self.y_filter.reset()
 
     def release(self):
         self.hands.close()
