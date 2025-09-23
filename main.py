@@ -2,7 +2,7 @@ import cv2
 import mediapipe as mp
 from inference.inference_mediapipe import HandTracker
 
-VIDEO_PATH = "videos/test-mediapipe-1.mov"
+VIDEO_PATH = "videos/true/pitch.mov"
 OUTPUT_CSV = "videos/output_index_finger.csv"
 OUTPUT_VIDEO = "videos/output_trajectory.mp4"
 
@@ -17,6 +17,7 @@ def draw_gizmo(frame, cx, cy, roll, pitch, yaw, size=40):
     roll = np.radians(roll)
     pitch = np.radians(pitch)
     yaw = np.radians(yaw)
+    
     Rx = np.array([
         [1, 0, 0],
         [0, np.cos(roll), -np.sin(roll)],
@@ -32,12 +33,25 @@ def draw_gizmo(frame, cx, cy, roll, pitch, yaw, size=40):
         [np.sin(yaw), np.cos(yaw), 0],
         [0, 0, 1]
     ])
+
+    # yaw-pitch-roll order
     R = Rz @ Ry @ Rx
-    axes = np.eye(3) * size
-    for i, color in enumerate([(0,0,255), (0,255,0), (255,0,0)]):
-        axis = R @ axes[:,i]
-        end_point = (int(cx + axis[0]), int(cy + axis[1]))
-        cv2.arrowedLine(frame, (int(cx), int(cy)), end_point, color, 2, tipLength=0.3)
+
+    forward_axis = np.array([1, 0, 0]) * size
+    right_axis = np.array([0, 1, 0]) * size
+    up_axis = np.array([0, 0, 1]) * size
+
+    axes = np.array([forward_axis, right_axis, up_axis])
+    colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]  
+    labels = ['Roll', 'Pitch', 'Yaw']
+        # labels = ['Forward', 'Right', 'Up']
+
+    for i, (color, label) in enumerate(zip(colors, labels)):
+        rotated_axis = R @ axes[i]
+        end_point = (int(cx + rotated_axis[0]), int(cy - rotated_axis[1])) 
+        cv2.arrowedLine(frame, (int(cx), int(cy)), end_point, color, 3, tipLength=0.2)
+        label_pos = (end_point[0] + 10, end_point[1])
+        cv2.putText(frame, label, label_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1, cv2.LINE_AA)
 
 def process_video(video_path, output_csv, output_video, sample_every=120):
     cap = cv2.VideoCapture(video_path)
@@ -106,12 +120,21 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
         
                 text = f"frame: {frame_idx}"
                 cv2.putText(frame, text, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 0), 3, cv2.LINE_AA)
+                
+                # Draw angle guides
+                guide_x = 250
                 if roll_text:
                     cv2.putText(frame, roll_text, (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
+                    cv2.ellipse(frame, (guide_x, 100), (30, 30), 0, -90, -90 + roll_deg, (0, 0, 255), 2)
+                    cv2.line(frame, (guide_x, 100), (guide_x + 30, 100), (0, 0, 255), 1) 
                 if pitch_text:
                     cv2.putText(frame, pitch_text, (30, 140), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2, cv2.LINE_AA)
+                    cv2.ellipse(frame, (guide_x, 140), (30, 30), 90, -90, -90 + pitch_deg, (0, 255, 0), 2)
+                    cv2.line(frame, (guide_x, 140), (guide_x, 110), (0, 255, 0), 1) 
                 if yaw_text:
                     cv2.putText(frame, yaw_text, (30, 180), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2, cv2.LINE_AA)
+                    cv2.ellipse(frame, (guide_x, 180), (30, 30), 0, 0, yaw_deg, (255, 0, 0), 2)
+                    cv2.line(frame, (guide_x, 180), (guide_x + 30, 180), (255, 0, 0), 1)  
                 frame_path = os.path.join(temp_dir, f"frame_{saved_idx:05d}.png")
                 cv2.imwrite(frame_path, frame)
                 saved_idx += 1
@@ -119,6 +142,7 @@ def process_video(video_path, output_csv, output_video, sample_every=120):
 
     cap.release()
     tracker.release()
+    
     ffmpeg_cmd = [
         "ffmpeg", "-y", "-framerate", str(output_fps), "-i",
         os.path.join(temp_dir, "frame_%05d.png"),

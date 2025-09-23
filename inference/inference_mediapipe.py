@@ -3,7 +3,7 @@ import mediapipe as mp
 import numpy as np
 
 class HandTracker:
-    def __init__(self, max_num_hands=2, detection_confidence=0.7, tracking_confidence=0.7, roll_change_threshold=0.02, smoothing_window_size=5):
+    def __init__(self, max_num_hands=2, detection_confidence=0.7, tracking_confidence=0.9, roll_change_threshold=0.02, smoothing_window_size=5, frame_skip=1):
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             max_num_hands=max_num_hands,
@@ -16,32 +16,46 @@ class HandTracker:
         self.roll_change_threshold = roll_change_threshold
         self.roll_history = [] 
         self.smoothing_window_size = 5
+        self.frame_skip = frame_skip
+        self.frame_count = 0
 
     def _get_hand_orientation(self, hand_landmarks, w, h):
-        points = np.asarray([
-            [hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y, hand_landmarks.landmark[0].z],
-            [hand_landmarks.landmark[5].x, hand_landmarks.landmark[5].y, hand_landmarks.landmark[5].z],
-            [hand_landmarks.landmark[17].x, hand_landmarks.landmark[17].y, hand_landmarks.landmark[17].z]
-        ])
-        normal = np.cross(points[2] - points[0], points[1] - points[2])
-        normal = normal / np.linalg.norm(normal) 
-
-        ref_up = np.array([0, -1, 0])
-
-        pitch = np.arctan2(normal[1], normal[2])
-        roll = np.arctan2(normal[0], normal[1])
+        wrist = np.array([hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y, hand_landmarks.landmark[0].z])
+        mcp_index = np.array([hand_landmarks.landmark[5].x, hand_landmarks.landmark[5].y, hand_landmarks.landmark[5].z])
+        mcp_pinky = np.array([hand_landmarks.landmark[17].x, hand_landmarks.landmark[17].y, hand_landmarks.landmark[17].z])
+        middle_mcp = np.array([hand_landmarks.landmark[9].x, hand_landmarks.landmark[9].y, hand_landmarks.landmark[9].z])
         
-        yaw = np.arctan2(normal[0], normal[2]) 
+        # X-axis: from wrist to middle finger MCP (forward direction)
+        hand_forward = middle_mcp - wrist
+        hand_forward = hand_forward / np.linalg.norm(hand_forward)
         
-        hand_x_axis = points[1] - points[0]
-        hand_x_axis = hand_x_axis / np.linalg.norm(hand_x_axis)        
-        hand_z_axis = normal
-        hand_y_axis = np.cross(hand_z_axis, hand_x_axis)
-        hand_y_axis = hand_y_axis / np.linalg.norm(hand_y_axis) 
+        # Y-axis: from pinky MCP to index MCP (left-right direction)
+        hand_right = mcp_index - mcp_pinky
+        hand_right = hand_right / np.linalg.norm(hand_right)
         
-        rotation_matrix = np.array([hand_x_axis, hand_y_axis, hand_z_axis]).T
+        # Z-axis: perpendicular to palm (up-down direction)
+        hand_up = np.cross(hand_forward, hand_right)
+        hand_up = hand_up / np.linalg.norm(hand_up)
+        
+        hand_right = np.cross(hand_up, hand_forward)
+        hand_right = hand_right / np.linalg.norm(hand_right)
+        
+        roll = np.arctan2(hand_right[2], hand_up[2])
+        
+        pitch = np.arcsin(-hand_forward[2])
+        yaw = np.arctan2(hand_forward[1], hand_forward[0])
+        roll_deg = np.degrees(roll)
+        pitch_deg = np.degrees(pitch)
+        yaw_deg = np.degrees(yaw)
+        
+        roll_deg = ((roll_deg + 180) % 360) - 180
+        pitch_deg = ((pitch_deg + 180) % 360) - 180
+        yaw_deg = ((yaw_deg + 180) % 360) - 180
+        
+        rotation_matrix = np.array([hand_forward, hand_right, hand_up]).T
         rvec, _ = cv2.Rodrigues(rotation_matrix)
-        return rvec, points[0], roll, pitch, yaw
+        
+        return rvec, wrist, np.radians(roll_deg), np.radians(pitch_deg), np.radians(yaw_deg)
 
     def _normalize_angle(self, angle, min_val, max_val):
         normalized = (angle - min_val) / (max_val - min_val)
@@ -54,6 +68,10 @@ class HandTracker:
         return (b, g, r)
 
     def process_frame(self, frame):
+        self.frame_count += 1
+        if self.frame_count % self.frame_skip != 0:
+            return frame 
+
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.hands.process(rgb_frame)
         h, w, c = frame.shape
@@ -66,9 +84,13 @@ class HandTracker:
                 tvec = np.array([wrist_3d_coords[0] * w, wrist_3d_coords[1] * h, wrist_3d_coords[2] * w], dtype="double")
 
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                cv2.putText(frame, f"roll: {np.degrees(roll):.2f}", (10, 30), font, 1, (0, 0, 255), 2, cv2.LINE_AA)   
-                cv2.putText(frame, f"pitch: {np.degrees(pitch):.2f}", (10, 70), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
-                cv2.putText(frame, f"yaw: {np.degrees(yaw):.2f}", (10, 110), font, 1, (255, 0, 0), 2, cv2.LINE_AA)
+                roll_desc = "palm down" if np.degrees(roll) > 10 else "palm up" if np.degrees(roll) < -10 else "neutral"
+                pitch_desc = "fingers up" if np.degrees(pitch) > 10 else "fingers down" if np.degrees(pitch) < -10 else "level"
+                yaw_desc = "pointing right" if np.degrees(yaw) > 10 else "pointing left" if np.degrees(yaw) < -10 else "forward"
+                
+                cv2.putText(frame, f"Roll: {np.degrees(roll):.1f}° ({roll_desc})", (10, 30), font, 0.7, (0, 0, 255), 2, cv2.LINE_AA)   
+                cv2.putText(frame, f"Pitch: {np.degrees(pitch):.1f}° ({pitch_desc})", (10, 60), font, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
+                cv2.putText(frame, f"Yaw: {np.degrees(yaw):.1f}° ({yaw_desc})", (10, 90), font, 0.7, (255, 0, 0), 2, cv2.LINE_AA)
 
                 index_finger_tip = hand_landmarks.landmark[self.mp_hands.HandLandmark.INDEX_FINGER_TIP]
                 cx, cy = int(index_finger_tip.x * w), int(index_finger_tip.y * h)
@@ -94,5 +116,3 @@ class HandTracker:
 
     def release(self):
         self.hands.close()
-
-
