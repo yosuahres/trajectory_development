@@ -19,7 +19,7 @@ class HandTracker:
         self.smoothing_window_size = 5
         self.frame_skip = frame_skip
         self.frame_count = 0
-        self.neutral_rotation_matrix = None # Stores the calibrated neutral pose
+        self.neutral_rotation_matrix = None 
 
         # init filter
         filter_window_size = smoothing_window_size 
@@ -84,12 +84,12 @@ class HandTracker:
         # Handle gimbal lock for pitch near +/- 90 degrees
         if np.abs(np.cos(pitch)) < 1e-6: # Gimbal lock
             roll = np.arctan2(rotation_matrix[0, 1], rotation_matrix[0, 2])
-            yaw = 0.0 # Or set to a default value, or handle based on specific needs
+            yaw = 0.0 
         else:
             roll = np.arctan2(rotation_matrix[2, 1], rotation_matrix[2, 2])
             yaw = np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
         
-        return rotation_matrix, wrist, roll, pitch, yaw # Return rotation_matrix directly
+        return rotation_matrix, wrist, roll, pitch, yaw 
 
     def _normalize_angle(self, angle, min_val, max_val):
         normalized = (angle - min_val) / (max_val - min_val)
