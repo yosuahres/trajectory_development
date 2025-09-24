@@ -42,8 +42,9 @@ def draw_gizmo(frame, cx, cy, roll, pitch, yaw, size=40):
     up_axis = np.array([0, 0, 1]) * size
 
     axes = np.array([forward_axis, right_axis, up_axis])
-    colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]  
-    labels = ['Roll', 'Pitch', 'Yaw']
+    colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]  
+    labels = ['Yaw', 'Pitch', 'Roll']
+    # roll, pitch, yaw
         # labels = ['Forward', 'Right', 'Up']
 
     for i, (color, label) in enumerate(zip(colors, labels)):
@@ -60,6 +61,8 @@ def process_camera(output_csv):
         return
 
     tracker = HandTracker()
+    # Add MediaPipe drawing utilities
+    mp_drawing = mp.solutions.drawing_utils
 
     with open(output_csv, mode='w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
@@ -78,9 +81,18 @@ def process_camera(output_csv):
             
             if results.multi_hand_landmarks:
                 for hand_landmarks in results.multi_hand_landmarks:
+                    # Draw hand landmarks and connections
+                    mp_drawing.draw_landmarks(
+                        frame, 
+                        hand_landmarks, 
+                        tracker.mp_hands.HAND_CONNECTIONS,
+                        mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2, circle_radius=2),
+                        mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2)
+                    )
+                    
                     index_finger_tip = hand_landmarks.landmark[tracker.mp_hands.HandLandmark.INDEX_FINGER_TIP]
                     cx, cy = int(index_finger_tip.x * w), int(index_finger_tip.y * h)
-                    rvec, wrist_3d_coords, roll, pitch, yaw = tracker._get_hand_orientation(hand_landmarks, w, h)
+                    rotation_matrix, wrist_3d_coords, roll, pitch, yaw = tracker._get_hand_orientation(hand_landmarks, w, h)
                     roll_deg = np.degrees(roll)
                     pitch_deg = np.degrees(pitch)
                     yaw_deg = np.degrees(yaw)
@@ -118,6 +130,10 @@ def process_camera(output_csv):
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break
+            elif key == ord('c'): # 'c' for calibrate
+                if results.multi_hand_landmarks:
+                    tracker.calibrate_neutral_pose(results.multi_hand_landmarks[0])
+                    print(f"Calibrated Neutral Rotation Matrix:\n{tracker.neutral_rotation_matrix}")
             
             frame_idx += 1
 

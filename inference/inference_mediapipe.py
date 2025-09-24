@@ -19,6 +19,7 @@ class HandTracker:
         self.smoothing_window_size = 5
         self.frame_skip = frame_skip
         self.frame_count = 0
+        self.neutral_rotation_matrix = None # Stores the calibrated neutral pose
 
         # init filter
         filter_window_size = smoothing_window_size 
@@ -27,6 +28,28 @@ class HandTracker:
         self.yaw_filter = AverageFilter(filter_window_size)
         self.x_filter = AverageFilter(filter_window_size)
         self.y_filter = AverageFilter(filter_window_size)
+
+    def calibrate_neutral_pose(self, hand_landmarks):
+        # Capture the current hand orientation as the neutral pose
+        wrist = np.array([hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y, hand_landmarks.landmark[0].z])
+        mcp_index = np.array([hand_landmarks.landmark[5].x, hand_landmarks.landmark[5].y, hand_landmarks.landmark[5].z])
+        mcp_pinky = np.array([hand_landmarks.landmark[17].x, hand_landmarks.landmark[17].y, hand_landmarks.landmark[17].z])
+        middle_mcp = np.array([hand_landmarks.landmark[9].x, hand_landmarks.landmark[9].y, hand_landmarks.landmark[9].z])
+        
+        hand_forward = middle_mcp - wrist
+        hand_forward = hand_forward / np.linalg.norm(hand_forward)
+        
+        hand_right = mcp_index - mcp_pinky
+        hand_right = hand_right / np.linalg.norm(hand_right)
+        
+        hand_up = np.cross(hand_forward, hand_right)
+        hand_up = hand_up / np.linalg.norm(hand_up)
+        
+        hand_right = np.cross(hand_up, hand_forward)
+        hand_right = hand_right / np.linalg.norm(hand_right)
+        
+        self.neutral_rotation_matrix = np.array([hand_forward, hand_right, hand_up]).T
+        print("Neutral pose calibrated.")
 
     def _get_hand_orientation(self, hand_landmarks, w, h):
         wrist = np.array([hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y, hand_landmarks.landmark[0].z])
@@ -49,22 +72,24 @@ class HandTracker:
         hand_right = np.cross(hand_up, hand_forward)
         hand_right = hand_right / np.linalg.norm(hand_right)
         
-        roll = np.arctan2(hand_right[2], hand_up[2])
-        
-        pitch = np.arcsin(-hand_forward[2])
-        yaw = np.arctan2(hand_forward[1], hand_forward[0])
-        roll_deg = np.degrees(roll)
-        pitch_deg = np.degrees(pitch)
-        yaw_deg = np.degrees(yaw)
-        
-        roll_deg = ((roll_deg + 180) % 360) - 180
-        pitch_deg = ((pitch_deg + 180) % 360) - 180
-        yaw_deg = ((yaw_deg + 180) % 360) - 180
-        
         rotation_matrix = np.array([hand_forward, hand_right, hand_up]).T
-        rvec, _ = cv2.Rodrigues(rotation_matrix)
+        # Extract Euler angles (roll, pitch, yaw) from the rotation matrix (ZYX order)
+        # R = Rz(yaw) * Ry(pitch) * Rx(roll)
+        # R = [[cos(yaw)cos(pitch), cos(yaw)sin(pitch)sin(roll) - sin(yaw)cos(roll), cos(yaw)sin(pitch)cos(roll) + sin(yaw)sin(roll)],
+        #      [sin(yaw)cos(pitch), sin(yaw)sin(pitch)sin(roll) + cos(yaw)cos(roll), sin(yaw)sin(pitch)cos(roll) - cos(yaw)sin(roll)],
+        #      [-sin(pitch), cos(pitch)sin(roll), cos(pitch)cos(roll)]]
+
+        pitch = -np.arcsin(rotation_matrix[2, 0])
+
+        # Handle gimbal lock for pitch near +/- 90 degrees
+        if np.abs(np.cos(pitch)) < 1e-6: # Gimbal lock
+            roll = np.arctan2(rotation_matrix[0, 1], rotation_matrix[0, 2])
+            yaw = 0.0 # Or set to a default value, or handle based on specific needs
+        else:
+            roll = np.arctan2(rotation_matrix[2, 1], rotation_matrix[2, 2])
+            yaw = np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
         
-        return rvec, wrist, np.radians(roll_deg), np.radians(pitch_deg), np.radians(yaw_deg)
+        return rotation_matrix, wrist, roll, pitch, yaw # Return rotation_matrix directly
 
     def _normalize_angle(self, angle, min_val, max_val):
         normalized = (angle - min_val) / (max_val - min_val)
@@ -88,12 +113,35 @@ class HandTracker:
             for hand_landmarks in results.multi_hand_landmarks:
                 self.mp_draw.draw_landmarks(frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
 
-                rvec, wrist_3d_coords, raw_roll, raw_pitch, raw_yaw = self._get_hand_orientation(hand_landmarks, w, h)
+                current_rotation_matrix, wrist_3d_coords, raw_roll, raw_pitch, raw_yaw = self._get_hand_orientation(hand_landmarks, w, h)
+
+                # print(f"Current Rotation Matrix:\n{current_rotation_matrix}")
+
+                # If a neutral pose is calibrated, calculate angles relative to it
+                if self.neutral_rotation_matrix is not None:
+                    relative_rotation_matrix = np.linalg.inv(self.neutral_rotation_matrix) @ current_rotation_matrix
+                    # print(f"Relative Rotation Matrix:\n{relative_rotation_matrix}")
+                    
+                    # Extract Euler angles from the relative rotation matrix (ZYX order)
+                    pitch = -np.arcsin(relative_rotation_matrix[2, 0])
+                    if np.abs(np.cos(pitch)) < 1e-6: # Gimbal lock
+                        roll = np.arctan2(relative_rotation_matrix[0, 1], relative_rotation_matrix[0, 2])
+                        yaw = 0.0
+                    else:
+                        roll = np.arctan2(relative_rotation_matrix[2, 1], relative_rotation_matrix[2, 2])
+                        yaw = np.arctan2(relative_rotation_matrix[1, 0], relative_rotation_matrix[0, 0])
+                    
+                    # print(f"Relative (raw) Roll: {np.degrees(roll):.2f}, Pitch: {np.degrees(pitch):.2f}, Yaw: {np.degrees(yaw):.2f}")
+                else:
+                    roll = raw_roll
+                    pitch = raw_pitch
+                    yaw = raw_yaw
+                    # print(f"Absolute (raw) Roll: {np.degrees(roll):.2f}, Pitch: {np.degrees(pitch):.2f}, Yaw: {np.degrees(yaw):.2f}")
 
                 # Apply moving average filter
-                roll = self.roll_filter.update(raw_roll)
-                pitch = self.pitch_filter.update(raw_pitch)
-                yaw = self.yaw_filter.update(raw_yaw)
+                roll = self.roll_filter.update(roll)
+                pitch = self.pitch_filter.update(pitch)
+                yaw = self.yaw_filter.update(yaw)
 
                 tvec = np.array([wrist_3d_coords[0] * w, wrist_3d_coords[1] * h, wrist_3d_coords[2] * w], dtype="double")
 
