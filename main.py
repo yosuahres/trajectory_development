@@ -42,9 +42,8 @@ def draw_gizmo(frame, cx, cy, roll, pitch, yaw, size=40):
     up_axis = np.array([0, 0, 1]) * size
 
     axes = np.array([forward_axis, right_axis, up_axis])
-    colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]  
-    labels = ['Yaw', 'Pitch', 'Roll']
-    # roll, pitch, yaw
+    colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]  # Red for Roll, Green for Pitch, Blue for Yaw
+    labels = ['Roll', 'Pitch', 'Yaw']
         # labels = ['Forward', 'Right', 'Up']
 
     for i, (color, label) in enumerate(zip(colors, labels)):
@@ -93,6 +92,12 @@ def process_camera(output_csv):
                     index_finger_tip = hand_landmarks.landmark[tracker.mp_hands.HandLandmark.INDEX_FINGER_TIP]
                     cx, cy = int(index_finger_tip.x * w), int(index_finger_tip.y * h)
                     rotation_matrix, wrist_3d_coords, roll, pitch, yaw = tracker._get_hand_orientation(hand_landmarks, w, h)
+                    
+                    # Swap roll and yaw variables
+                    temp_roll = roll
+                    roll = yaw
+                    yaw = temp_roll
+
                     roll_deg = np.degrees(roll)
                     pitch_deg = np.degrees(pitch)
                     yaw_deg = np.degrees(yaw)
@@ -114,14 +119,17 @@ def process_camera(output_csv):
             # Draw angle guides
             guide_x = 250
             if roll_text:
+                # Roll text and ellipse should be Red (0, 0, 255)
                 cv2.putText(frame, roll_text, (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
                 cv2.ellipse(frame, (guide_x, 100), (30, 30), 0, -90, -90 + roll_deg, (0, 0, 255), 2)
                 cv2.line(frame, (guide_x, 100), (guide_x + 30, 100), (0, 0, 255), 1) 
             if pitch_text:
+                # Pitch text and ellipse should be Green (0, 255, 0)
                 cv2.putText(frame, pitch_text, (30, 140), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2, cv2.LINE_AA)
                 cv2.ellipse(frame, (guide_x, 140), (30, 30), 90, -90, -90 + pitch_deg, (0, 255, 0), 2)
                 cv2.line(frame, (guide_x, 140), (guide_x, 110), (0, 255, 0), 1) 
             if yaw_text:
+                # Yaw text and ellipse should be Blue (255, 0, 0)
                 cv2.putText(frame, yaw_text, (30, 180), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2, cv2.LINE_AA)
                 cv2.ellipse(frame, (guide_x, 180), (30, 30), 0, 0, yaw_deg, (255, 0, 0), 2)
                 cv2.line(frame, (guide_x, 180), (guide_x + 30, 180), (255, 0, 0), 1)  

@@ -59,13 +59,14 @@ python3 main.py
 
 This will start the hand tracking process and display the visualization.
 
-## How to Test Roll, Pitch, and Yaw
-
-### General Setup:
-*   Use either your left or right hand. The system should be able to track both.
-
 ### To be Noted:
 *   Camera angle positioning is affecting the result, as im using my laptop webcam, i need to make sure my hands are on the laptops webcam height level.
-*   How far your hands from the camera it does not matter.
-*   Yaw is waving should be roll
-*   Pitch is correct, yaw and roll should be switched
+*   Use either your left or right hand. The system should be able to track both.
+*   How far your hands from the camera it does matter.
+*   Any background does not affect the result
+*   Lighting condition does affect the tracker of the mediapipe
+*   Camera mirror does affect the result.
+*   Initially, there was a confusion where the calculated 'roll' value was visually represented as 'yaw', and vice-versa. This has been corrected in `main.py`. Specifically, the value initially calculated as 'roll' by the `_get_hand_orientation` function is now assigned to the 'yaw' variable, and the value initially calculated as 'yaw' is assigned to the 'roll' variable. The underlying calculations for the hand orientation were always correct, but the labels and visual indicators (gizmo colors, text displays) were swapped.
+
+### To do:
+*   Handle the back of the hand
