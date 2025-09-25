@@ -2,9 +2,9 @@ import cv2
 import mediapipe as mp
 from inference.inference_mediapipe import HandTracker
 
-VIDEO_PATH = "videos/ancuk.mov"
-OUTPUT_CSV = "videos/output_index_finger.csv"
-OUTPUT_VIDEO = "videos/output_trajectory.mp4"
+VIDEO_PATH = "videos/ancuk.mov" #!CHANGETHIS
+OUTPUT_CSV = "videos/output_index_finger.csv" #!CHANGETHIS
+OUTPUT_VIDEO = "videos/output_trajectory.mp4" #!CHANGETHIS
 
 import sys
 import csv
@@ -172,7 +172,7 @@ def process_video(video_path, output_csv, output_video=None):
         print(f"Output video saved to {output_video}")
 
 def process_camera(output_csv):
-    cap = cv2.VideoCapture(0)  # Use default camera
+    cap = cv2.VideoCapture(0)  #!CHANGETHIS
     if not cap.isOpened():
         print("Error: Could not open camera.")
         return

@@ -4,7 +4,7 @@ import numpy as np
 from includes.filter import AverageFilter
 
 class HandTracker:
-    def __init__(self, max_num_hands=2, detection_confidence=0.7, tracking_confidence=0.9, roll_change_threshold=0.02, smoothing_window_size=5, frame_skip=1):
+    def __init__(self, max_num_hands=2, detection_confidence=0.7, tracking_confidence=0.9, roll_change_threshold=0.02, smoothing_window_size=5, frame_skip=1): #!CHANGETHIS
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             max_num_hands=max_num_hands,

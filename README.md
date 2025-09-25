@@ -51,7 +51,10 @@ After installing dependencies and making any necessary modifications, you can ru
 python3 main.py
 ```
 
-This will start the hand tracking process and display the visualization.
+This will start the hand tracking process and display the visualization.  
+Option 1: real time processing using your desired cam.   
+Option 2: processing the video path declare on main.py.  
+Option 3: exit program.   
 
 ### 5. Commit message
 This project uses the conventional commit specification for better readability and clarity. It is mandatory to use conventional commit messages. Read more about conventional commits [here](https://www.conventionalcommits.org/en/v1.0.0/).
