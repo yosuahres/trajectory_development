@@ -70,4 +70,4 @@ This project uses the conventional commit specification for better readability a
 
 ## ⁉️ author?   
 Author: Yosua Hares.  
-Email: haresyosuaa[@]gmail.com
+Email: haresyosuaa[at]gmail.com
