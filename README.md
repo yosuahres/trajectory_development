@@ -70,6 +70,7 @@ This project uses the conventional commit specification for better readability a
 
 ### 7. To do:
 *   Handle the back of the hand
+*   Handle calibration for zeroing
 
 ## ⁉️ author?   
 Author: Yosua Hares.  

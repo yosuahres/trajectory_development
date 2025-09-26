@@ -29,8 +29,9 @@ class HandTracker:
         self.x_filter = AverageFilter(filter_window_size)
         self.y_filter = AverageFilter(filter_window_size)
 
+
+    # currently not working
     def calibrate_neutral_pose(self, hand_landmarks):
-        # Capture the current hand orientation as the neutral pose
         wrist = np.array([hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y, hand_landmarks.landmark[0].z])
         mcp_index = np.array([hand_landmarks.landmark[5].x, hand_landmarks.landmark[5].y, hand_landmarks.landmark[5].z])
         mcp_pinky = np.array([hand_landmarks.landmark[17].x, hand_landmarks.landmark[17].y, hand_landmarks.landmark[17].z])
@@ -60,15 +61,18 @@ class HandTracker:
         # X-axis: from wrist to middle finger MCP (forward direction)
         hand_forward = middle_mcp - wrist
         hand_forward = hand_forward / np.linalg.norm(hand_forward)
+        print(f"value of x: {hand_forward}")
         
         # Y-axis: from pinky MCP to index MCP (left-right direction)
         hand_right = mcp_index - mcp_pinky
         hand_right = hand_right / np.linalg.norm(hand_right)
+        print(f"value of y: {hand_right}")
         
         # Z-axis: perpendicular to palm (up-down direction)
         hand_up = np.cross(hand_forward, hand_right)
         hand_up = hand_up / np.linalg.norm(hand_up)
-        
+        print(f"value of z: {hand_up}")
+
         hand_right = np.cross(hand_up, hand_forward)
         hand_right = hand_right / np.linalg.norm(hand_right)
         
@@ -82,7 +86,7 @@ class HandTracker:
         pitch = -np.arcsin(rotation_matrix[2, 0])
 
         # Handle gimbal lock for pitch near +/- 90 degrees
-        if np.abs(np.cos(pitch)) < 1e-6: # Gimbal lock
+        if np.abs(np.cos(pitch)) < 1e-6: # gimbal lock
             roll = np.arctan2(rotation_matrix[0, 1], rotation_matrix[0, 2])
             yaw = 0.0 
         else:

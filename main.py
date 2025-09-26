@@ -191,6 +191,7 @@ def process_camera(output_csv):
                 print("Error: Could not read frame from camera.")
                 break
 
+            frame = cv2.flip(frame, 1) # mirror
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = tracker.hands.process(rgb_frame)
             h, w, _ = frame.shape
