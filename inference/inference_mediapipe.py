@@ -4,7 +4,7 @@ import numpy as np
 from includes.filter import AverageFilter
 
 class HandTracker:
-    def __init__(self, max_num_hands=2, detection_confidence=0.7, tracking_confidence=0.9, roll_change_threshold=0.02, smoothing_window_size=5, frame_skip=1): #!CHANGETHIS
+    def __init__(self, max_num_hands=2, detection_confidence=0.7, tracking_confidence=0.9, roll_change_threshold=0.02, smoothing_window_size=5, frame_skip=1, handle_back_of_hand=True, flip_back_angles=True): #!CHANGETHIS
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             max_num_hands=max_num_hands,
@@ -29,6 +29,10 @@ class HandTracker:
         self.x_filter = AverageFilter(filter_window_size)
         self.y_filter = AverageFilter(filter_window_size)
 
+        # Back of hand settings
+        self.handle_back_of_hand = handle_back_of_hand
+        self.flip_back_angles = flip_back_angles
+
 
     # currently not working
     def calibrate_neutral_pose(self, hand_landmarks):
@@ -52,6 +56,34 @@ class HandTracker:
         self.neutral_rotation_matrix = np.array([hand_forward, hand_right, hand_up]).T
         print("Neutral pose calibrated.")
 
+    def _handle_back_of_hand_adjustment(self, roll, pitch, yaw, is_back_facing):
+        """
+        Adjust angles when back of hand is detected.
+        
+        Args:
+            roll, pitch, yaw: Original Euler angles
+            is_back_facing: Boolean indicating if back of hand is facing camera
+            
+        Returns:
+            Adjusted roll, pitch, yaw angles
+        """
+        if not self.handle_back_of_hand or not is_back_facing:
+            return roll, pitch, yaw
+        
+        adjusted_roll = roll
+        adjusted_pitch = pitch
+        adjusted_yaw = yaw
+        
+        if self.flip_back_angles:
+            # Flip roll when back is facing camera
+            adjusted_roll = -roll
+            # Optionally adjust pitch (uncomment if needed)
+            # adjusted_pitch = -pitch
+            # Optionally adjust yaw (uncomment if needed)
+            # adjusted_yaw = -yaw
+        
+        return adjusted_roll, adjusted_pitch, adjusted_yaw
+
     def _get_hand_orientation(self, hand_landmarks, w, h):
         wrist = np.array([hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y, hand_landmarks.landmark[0].z])
         mcp_index = np.array([hand_landmarks.landmark[5].x, hand_landmarks.landmark[5].y, hand_landmarks.landmark[5].z])
@@ -61,39 +93,34 @@ class HandTracker:
         # X-axis: from wrist to middle finger MCP (forward direction)
         hand_forward = middle_mcp - wrist
         hand_forward = hand_forward / np.linalg.norm(hand_forward)
-        print(f"value of x: {hand_forward}")
         
         # Y-axis: from pinky MCP to index MCP (left-right direction)
         hand_right = mcp_index - mcp_pinky
         hand_right = hand_right / np.linalg.norm(hand_right)
-        print(f"value of y: {hand_right}")
         
         # Z-axis: perpendicular to palm (up-down direction)
         hand_up = np.cross(hand_forward, hand_right)
         hand_up = hand_up / np.linalg.norm(hand_up)
-        print(f"value of z: {hand_up}")
 
         hand_right = np.cross(hand_up, hand_forward)
         hand_right = hand_right / np.linalg.norm(hand_right)
         
         rotation_matrix = np.array([hand_forward, hand_right, hand_up]).T
-        # Extract Euler angles (roll, pitch, yaw) from the rotation matrix (ZYX order)
-        # R = Rz(yaw) * Ry(pitch) * Rx(roll)
-        # R = [[cos(yaw)cos(pitch), cos(yaw)sin(pitch)sin(roll) - sin(yaw)cos(roll), cos(yaw)sin(pitch)cos(roll) + sin(yaw)sin(roll)],
-        #      [sin(yaw)cos(pitch), sin(yaw)sin(pitch)sin(roll) + cos(yaw)cos(roll), sin(yaw)sin(pitch)cos(roll) - cos(yaw)sin(roll)],
-        #      [-sin(pitch), cos(pitch)sin(roll), cos(pitch)cos(roll)]]
 
+        # Detect if back of hand is facing camera (z component of hand_up < 0)
+        is_back_facing = hand_up[2] < 0
+
+        # Extract Euler angles (roll, pitch, yaw) from the rotation matrix (ZYX order)
         pitch = -np.arcsin(rotation_matrix[2, 0])
 
-        # Handle gimbal lock for pitch near +/- 90 degrees
         if np.abs(np.cos(pitch)) < 1e-6: # gimbal lock
             roll = np.arctan2(rotation_matrix[0, 1], rotation_matrix[0, 2])
             yaw = 0.0 
         else:
             roll = np.arctan2(rotation_matrix[2, 1], rotation_matrix[2, 2])
             yaw = np.arctan2(rotation_matrix[1, 0], rotation_matrix[0, 0])
-        
-        return rotation_matrix, wrist, roll, pitch, yaw 
+
+        return rotation_matrix, wrist, roll, pitch, yaw, is_back_facing
 
     def _normalize_angle(self, angle, min_val, max_val):
         normalized = (angle - min_val) / (max_val - min_val)
@@ -117,14 +144,11 @@ class HandTracker:
             for hand_landmarks in results.multi_hand_landmarks:
                 self.mp_draw.draw_landmarks(frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
 
-                current_rotation_matrix, wrist_3d_coords, raw_roll, raw_pitch, raw_yaw = self._get_hand_orientation(hand_landmarks, w, h)
-
-                # print(f"Current Rotation Matrix:\n{current_rotation_matrix}")
+                current_rotation_matrix, wrist_3d_coords, raw_roll, raw_pitch, raw_yaw, is_back_facing = self._get_hand_orientation(hand_landmarks, w, h)
 
                 # If a neutral pose is calibrated, calculate angles relative to it
                 if self.neutral_rotation_matrix is not None:
                     relative_rotation_matrix = np.linalg.inv(self.neutral_rotation_matrix) @ current_rotation_matrix
-                    # print(f"Relative Rotation Matrix:\n{relative_rotation_matrix}")
                     
                     # Extract Euler angles from the relative rotation matrix (ZYX order)
                     pitch = -np.arcsin(relative_rotation_matrix[2, 0])
@@ -134,13 +158,13 @@ class HandTracker:
                     else:
                         roll = np.arctan2(relative_rotation_matrix[2, 1], relative_rotation_matrix[2, 2])
                         yaw = np.arctan2(relative_rotation_matrix[1, 0], relative_rotation_matrix[0, 0])
-                    
-                    # print(f"Relative (raw) Roll: {np.degrees(roll):.2f}, Pitch: {np.degrees(pitch):.2f}, Yaw: {np.degrees(yaw):.2f}")
                 else:
                     roll = raw_roll
                     pitch = raw_pitch
                     yaw = raw_yaw
-                    # print(f"Absolute (raw) Roll: {np.degrees(roll):.2f}, Pitch: {np.degrees(pitch):.2f}, Yaw: {np.degrees(yaw):.2f}")
+
+                # Apply back of hand adjustments
+                roll, pitch, yaw = self._handle_back_of_hand_adjustment(roll, pitch, yaw, is_back_facing)
 
                 # Apply moving average filter
                 roll = self.roll_filter.update(roll)
@@ -150,7 +174,13 @@ class HandTracker:
                 tvec = np.array([wrist_3d_coords[0] * w, wrist_3d_coords[1] * h, wrist_3d_coords[2] * w], dtype="double")
 
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                roll_desc = "palm down" if np.degrees(roll) > 10 else "palm up" if np.degrees(roll) < -10 else "neutral"
+                
+                # Update roll description based on back of hand state
+                if is_back_facing and self.handle_back_of_hand:
+                    roll_desc = "back down" if np.degrees(roll) > 10 else "back up" if np.degrees(roll) < -10 else "neutral"
+                else:
+                    roll_desc = "palm down" if np.degrees(roll) > 10 else "palm up" if np.degrees(roll) < -10 else "neutral"
+                
                 pitch_desc = "fingers up" if np.degrees(pitch) > 10 else "fingers down" if np.degrees(pitch) < -10 else "level"
                 yaw_desc = "pointing right" if np.degrees(yaw) > 10 else "pointing left" if np.degrees(yaw) < -10 else "forward"
                 
@@ -177,6 +207,12 @@ class HandTracker:
                   
                     cv2.line(frame, (x0 + offset, y0 + offset), (x1 + offset, y1 + offset), (255, 0, 0), 2)
                 cv2.circle(frame, (cx, cy), 5, (0, 0, 255), cv2.FILLED)
+
+                # Display hand orientation info
+                if self.handle_back_of_hand:
+                    orientation_text = "Back of hand" if is_back_facing else "Palm"
+                    color = (0, 255, 255) if is_back_facing else (255, 255, 255)
+                    cv2.putText(frame, orientation_text, (10, 120), font, 0.7, color, 2, cv2.LINE_AA)
 
         return frame
 
