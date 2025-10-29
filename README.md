@@ -4,6 +4,14 @@
 
 This project uses Python and requires several dependencies. It is highly recommended to use a virtual environment (`venv`) to manage these dependencies.
 
+### 0. Initial setup on a new PC 
+
+If you are setting up this project on a brand‑new PC, follow the dedicated setup guide first:
+
+- See [README_SETUP.md](./README_SETUP.md)  
+
+Continue with the rest of this README after completing the steps in README_SETUP.md.
+
 ### 1. Clone this repo:
 
 Using bash or other terminal
@@ -51,26 +59,38 @@ After installing dependencies and making any necessary modifications, you can ru
 python3 main.py
 ```
 
-This will start the hand tracking process and display the visualization.  
-Option 1: real time processing using your desired cam.   
-Option 2: processing the video path declare on main.py.  
-Option 3: exit program.   
+This will start the hand tracking process and display the visualization. The following options are available:
+- **1. Real time camera**: Process hand tracking using your desired webcam in real-time.
+- **2. Process video file**: Process hand tracking from a specified video file path declared in `main.py`.
+- **3. Configure back of hand settings**: Adjust settings related to back-of-hand detection.
+- **4. Configure video sampling interval (for option 2)**: Set the sampling interval for video processing when using option 2.
+- **5. Exit**: Terminate the program.
 
-### 5. Commit message
+### 5. Troubleshooting
+
+Here are some common issues you might encounter and how to resolve them:
+
+*   **`ModuleNotFoundError` or other dependency issues**:
+    *   Ensure you have activated your virtual environment (`venv`).
+    *   Make sure all dependencies are installed by running `pip install -r requirements.txt` within your activated virtual environment.
+*   **Camera not detected or accessible**:
+    *   Check if your webcam is properly connected and not being used by another application.
+    *   Verify that your operating system grants Python (or your terminal application) permission to access the camera.
+    *   If using a specific camera, ensure it's correctly configured in `main.py` if applicable.
+*   **Poor hand tracking performance or accuracy**:
+    *   Ensure good lighting conditions. Mediapipe's hand tracking can be sensitive to poor lighting.
+    *   Keep your hand within a reasonable distance from the camera. Too close or too far can reduce accuracy.
+    *   Avoid cluttered backgrounds if possible, although the system is designed to be robust to them.
+    *   Check the camera's resolution and frame rate. Higher quality input generally leads to better tracking.
+*   **Incorrect Roll, Pitch, Yaw values**:
+    *   Be aware that camera mirroring can affect the perceived orientation. Adjust your interpretation or camera settings accordingly.
+    *   Ensure your hand is positioned consistently relative to the camera.
+
+### 6. Commit message
 This project uses the conventional commit specification for better readability and clarity. It is mandatory to use conventional commit messages. Read more about conventional commits [here](https://www.conventionalcommits.org/en/v1.0.0/).
 
-### 6. To be Noted:
-*   Camera angle positioning is affecting the result, as im using my laptop webcam, i need to make sure my hands are on the laptops webcam height level.
-*   Use either your left or right hand. The system should be able to track both.
-*   How far your hands from the camera it does matter.
-*   Any background does not affect the result
-*   Lighting condition does affect the tracker of the mediapipe
-*   Camera mirror does affect the result.
-*   Initially, there was a confusion where the calculated 'roll' value was visually represented as 'yaw', and vice-versa. This has been corrected in `main.py`. Specifically, the value initially calculated as 'roll' by the `_get_hand_orientation` function is now assigned to the 'yaw' variable, and the value initially calculated as 'yaw' is assigned to the 'roll' variable. The underlying calculations for the hand orientation were always correct, but the labels and visual indicators (gizmo colors, text displays) were swapped.
-
 ### 7. To do:
-*   Handle the back of the hand
-*   Handle calibration for zeroing
+*   Handle calibration for zeroing initial hand position
 
 ## ⁉️ author?   
 Author: Yosua Hares.  

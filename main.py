@@ -10,7 +10,7 @@ import shutil
 import subprocess
 from includes.menu import run_interactive_menu
 
-VIDEO_PATH = "videos/test_videos/yaw.mov"  # !CHANGETHIS
+VIDEO_PATH = "videos/test_videos/door-handle.mov"  # !CHANGETHIS
 OUTPUT_CSV = "videos/output_index_finger.csv"  # !CHANGETHIS
 OUTPUT_VIDEO = "videos/output_trajectory.mp4"  # !CHANGETHIS
 
